@@ -66,6 +66,28 @@ export function countBlogContentFilenames(entries: string[]): number {
   return listBlogContentFilenames(entries).length
 }
 
+/**
+ * Parse an inline flow sequence, e.g. `["Blog", "News"]`, `['a','b']` or `[]`.
+ * Returns null when the value is not an inline array.
+ */
+function parseInlineArray(value: string): string[] | null {
+  if (!value.startsWith('[') || !value.endsWith(']')) return null
+  const inner = value.slice(1, -1).trim()
+  if (!inner) return []
+  try {
+    const parsed: unknown = JSON.parse(value)
+    if (Array.isArray(parsed)) {
+      return parsed.map((item) => String(item).trim()).filter(Boolean)
+    }
+  } catch {
+    // Not strict JSON (single quotes / unquoted YAML) — fall through to a tolerant split.
+  }
+  return inner
+    .split(',')
+    .map((part) => part.trim().replace(/^["']|["']$/g, '').trim())
+    .filter(Boolean)
+}
+
 function parseFrontmatter(raw: string): { data: Record<string, unknown>; body: string } {
   const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/)
   if (!match?.[1] || match[2] === undefined) return { data: {}, body: raw.trim() }
@@ -74,7 +96,7 @@ function parseFrontmatter(raw: string): { data: Record<string, unknown>; body: s
   const body = match[2].trim()
   let currentList: string | null = null
 
-  for (const line of block.split('\n')) {
+  for (const line of block.split(/\r?\n/)) {
     const listItem = line.match(/^\s+-\s+(.+)$/)
     if (listItem?.[1] && currentList) {
       const arr = (data[currentList] as string[]) ?? []
@@ -92,6 +114,11 @@ function parseFrontmatter(raw: string): { data: Record<string, unknown>; body: s
       continue
     }
     currentList = null
+    const inline = parseInlineArray(value)
+    if (inline) {
+      data[key] = inline
+      continue
+    }
     data[key] = value.replace(/^["']|["']$/g, '')
   }
   return { data, body }
