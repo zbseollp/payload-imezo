@@ -256,7 +256,15 @@ function firstImageFromLexical(content: unknown): string | undefined {
       const bare = obj.text.match(/(\/wp-content\/uploads\/[^\s"'<>]+)/i)
       if (bare?.[1] && looksLikeImagePath(bare[1])) return bare[1]
     }
-    if (typeof obj.url === 'string' && looksLikeImagePath(obj.url)) return obj.url
+    // A bare `url` is NOT evidence of an image. Lexical link nodes keep their
+    // href at fields.url, and looksLikeImagePath() accepts any absolute URL —
+    // so without this check the article's last outbound link silently becomes
+    // the post's featured image. Only trust a url that sits on an upload node
+    // (which carries filename/mimeType) or that ends in an image extension.
+    if (typeof obj.url === 'string') {
+      const isUploadNode = typeof obj.mimeType === 'string' || typeof obj.filename === 'string'
+      if (isUploadNode ? looksLikeImagePath(obj.url) : hasImageExtension(obj.url)) return obj.url
+    }
     for (const v of Object.values(obj)) {
       if (Array.isArray(v)) stack.push(...v)
       else if (v && typeof v === 'object') stack.push(v)
@@ -291,6 +299,12 @@ function firstImageFromExtra(extra: Record<string, unknown> | null | undefined):
     if (typeof v === 'string' && looksLikeImagePath(v)) return v
   }
   return undefined
+}
+
+/** True only when the path ends in a real image extension (ignoring ?query / #hash). */
+function hasImageExtension(value: string): boolean {
+  const s = value.trim().split('#')[0] ?? ''
+  return /\.(jpe?g|png|gif|webp|avif|svg)(\?.*)?$/i.test(s)
 }
 
 function looksLikeImagePath(value: string): boolean {
