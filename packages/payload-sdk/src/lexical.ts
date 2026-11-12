@@ -72,7 +72,10 @@ function walk(node: Node, depth: number): string {
 
     case 'upload': {
       const value = (node as { value?: { url?: string; alt?: string } }).value
-      if (value?.url) return `![${value.alt ?? ''}](${value.url})`
+      // encodeURI: R2 filenames often contain spaces ("Kantoor huren.jpg").
+      // A raw space ends the markdown destination, so the image never parses
+      // as an image at all. encodeURI is idempotent on an already-escaped URL.
+      if (value?.url) return `![${value.alt ?? ''}](${encodeURI(value.url)})`
       return ''
     }
 
