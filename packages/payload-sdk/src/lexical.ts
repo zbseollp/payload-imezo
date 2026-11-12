@@ -18,6 +18,27 @@ export function lexicalToMarkdown(state: unknown): string {
   return walk(root, 0).trim() + '\n'
 }
 
+/**
+ * Escape only the characters that terminate a markdown link destination.
+ *
+ * R2 filenames often contain spaces ("Kantoor huren.jpg"); a raw space ends
+ * the destination, so the image never parses as an image at all and silently
+ * disappears. Deliberately NOT encodeURI, which also escapes "%" and would
+ * turn an already-escaped "%20" into "%2520". None of these five characters
+ * can occur inside a percent-escape, so this is safe to apply repeatedly.
+ */
+const MD_URL_ESCAPES: Record<string, string> = {
+  ' ': '%20',
+  '(': '%28',
+  ')': '%29',
+  '<': '%3C',
+  '>': '%3E',
+}
+
+function escapeMarkdownUrl(url: string): string {
+  return url.replace(/[ ()<>]/g, (c) => MD_URL_ESCAPES[c] ?? c)
+}
+
 function walk(node: Node, depth: number): string {
   if (!node) return ''
   const children = node.children ?? []
@@ -72,10 +93,7 @@ function walk(node: Node, depth: number): string {
 
     case 'upload': {
       const value = (node as { value?: { url?: string; alt?: string } }).value
-      // encodeURI: R2 filenames often contain spaces ("Kantoor huren.jpg").
-      // A raw space ends the markdown destination, so the image never parses
-      // as an image at all. encodeURI is idempotent on an already-escaped URL.
-      if (value?.url) return `![${value.alt ?? ''}](${encodeURI(value.url)})`
+      if (value?.url) return `![${value.alt ?? ''}](${escapeMarkdownUrl(value.url)})`
       return ''
     }
 
